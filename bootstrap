@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Fresh-Mac bootstrap. Lives in a SEPARATE public repo
+# (philtim/dotfiles-bootstrap) as just `bootstrap` + README.
+#
+# Usage (paste into Terminal on a fresh Mac):
+#   curl -fsSL https://raw.githubusercontent.com/philtim/dotfiles-bootstrap/main/bootstrap | bash
+#
+# Steps:
+#   1. macOS sanity
+#   2. xcode-select install + wait for the GUI dialog
+#   3. Homebrew install (Apple Silicon / Intel auto-detected)
+#   4. brew install gh
+#   5. gh auth login --web (opens browser; no PATs in URL)
+#   6. gh repo clone philtim/dotfiles (private repo, auth from step 5)
+#   7. exec setup.sh
+
+set -e
+REPO="philtim/dotfiles"
+DEST="$HOME/.dotfiles"
+
+[[ "$(uname)" == Darwin ]] || { echo "macOS only" >&2; exit 1; }
+
+if ! xcode-select -p &>/dev/null; then
+    echo "==> Installing Xcode command line tools (click through the GUI dialog)..."
+    xcode-select --install
+    until xcode-select -p &>/dev/null; do
+        echo "    (still waiting — approve the install dialog)"
+        sleep 20
+    done
+fi
+
+if ! command -v brew &>/dev/null; then
+    echo "==> Installing Homebrew..."
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    BREW_PREFIX=$([[ $(uname -m) == arm64 ]] && echo /opt/homebrew || echo /usr/local)
+    eval "$($BREW_PREFIX/bin/brew shellenv)"
+fi
+
+if ! command -v gh &>/dev/null; then
+    echo "==> Installing GitHub CLI..."
+    brew install gh
+fi
+
+if ! gh auth status &>/dev/null; then
+    echo "==> Signing in to GitHub (browser will open)..."
+    gh auth login --hostname github.com --git-protocol https --web
+fi
+
+if [[ ! -d "$DEST" ]]; then
+    echo "==> Cloning $REPO into $DEST..."
+    gh repo clone "$REPO" "$DEST"
+else
+    echo "==> $DEST already exists, skipping clone"
+fi
+
+echo "==> Handing off to $DEST/setup.sh..."
+cd "$DEST"
+exec ./setup.sh

@@ -72,7 +72,18 @@ if [[ ! -d "$DEST" ]]; then
     echo "==> Cloning $REPO into $DEST..."
     gh repo clone "$REPO" "$DEST"
 else
-    echo "==> $DEST already exists, skipping clone"
+    # Re-running the curl one-liner on a machine where ~/.dotfiles already
+    # exists should pick up upstream fixes, not silently run the stale local
+    # copy. Pull --ff-only on main; refuse to touch any other branch so
+    # in-progress work isn't clobbered.
+    current_branch=$(git -C "$DEST" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [[ "$current_branch" == "main" ]]; then
+        echo "==> $DEST exists on main — fast-forwarding to latest..."
+        git -C "$DEST" pull --ff-only origin main || \
+            echo "    (could not fast-forward; continuing with current state)"
+    else
+        echo "==> $DEST exists on branch '$current_branch' — leaving untouched"
+    fi
 fi
 
 echo "==> Handing off to $DEST/setup.sh..."

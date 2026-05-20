@@ -1,46 +1,68 @@
 #!/usr/bin/env bash
-# Fresh-Mac bootstrap. Lives in a SEPARATE public repo
+# Fresh-machine bootstrap. Lives in a SEPARATE public repo
 # (philtim/dotfiles-bootstrap) as just `bootstrap` + README.
 #
-# Usage (paste into Terminal on a fresh Mac):
+# Usage (paste into Terminal on a fresh Mac or Omarchy install):
 #   curl -fsSL https://raw.githubusercontent.com/philtim/dotfiles-bootstrap/main/bootstrap | bash
 #
 # Steps:
-#   1. macOS sanity
-#   2. xcode-select install + wait for the GUI dialog
-#   3. Homebrew install (Apple Silicon / Intel auto-detected)
-#   4. brew install gh
-#   5. gh auth login --web (opens browser; no PATs in URL)
-#   6. gh repo clone philtim/dotfiles (private repo, auth from step 5)
-#   7. exec setup.sh
+#   1. Detect OS (Darwin or Arch-based Linux).
+#   2. Mac: xcode-select wait, Homebrew, brew install gh.
+#      Omarchy: pacman -S git github-cli.
+#   3. gh auth login --web (browser-based; no PATs in URL).
+#   4. gh repo clone philtim/dotfiles into ~/.dotfiles.
+#   5. exec setup.sh
 
 set -e
 REPO="philtim/dotfiles"
 DEST="$HOME/.dotfiles"
 
-[[ "$(uname)" == Darwin ]] || { echo "macOS only" >&2; exit 1; }
+OS="$(uname)"
 
-if ! xcode-select -p &>/dev/null; then
-    echo "==> Installing Xcode command line tools (click through the GUI dialog)..."
-    xcode-select --install
-    until xcode-select -p &>/dev/null; do
-        echo "    (still waiting — approve the install dialog)"
-        sleep 20
-    done
+if [[ "$OS" == "Darwin" ]]; then
+    # ---------- macOS ------------------------------------------------------
+    if ! xcode-select -p &>/dev/null; then
+        echo "==> Installing Xcode command line tools (click through the GUI dialog)..."
+        xcode-select --install
+        until xcode-select -p &>/dev/null; do
+            echo "    (still waiting — approve the install dialog)"
+            sleep 20
+        done
+    fi
+
+    if ! command -v brew &>/dev/null; then
+        echo "==> Installing Homebrew..."
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        BREW_PREFIX=$([[ $(uname -m) == arm64 ]] && echo /opt/homebrew || echo /usr/local)
+        eval "$($BREW_PREFIX/bin/brew shellenv)"
+    fi
+
+    if ! command -v gh &>/dev/null; then
+        echo "==> Installing GitHub CLI..."
+        brew install gh
+    fi
+
+elif [[ "$OS" == "Linux" ]]; then
+    # ---------- Linux / Arch (Omarchy) ------------------------------------
+    if [[ ! -r /etc/os-release ]]; then
+        echo "Cannot detect Linux distro (/etc/os-release missing)." >&2
+        exit 1
+    fi
+    . /etc/os-release
+    if [[ "${ID:-}" != "arch" && " ${ID_LIKE:-} " != *" arch "* ]]; then
+        echo "Unsupported Linux distro: ID=${ID:-?}. Only Arch-based (Omarchy) is supported." >&2
+        exit 1
+    fi
+
+    echo "==> Installing git + github-cli via pacman..."
+    sudo pacman -S --needed --noconfirm git github-cli
+
+else
+    echo "Unsupported OS: $OS" >&2
+    exit 1
 fi
 
-if ! command -v brew &>/dev/null; then
-    echo "==> Installing Homebrew..."
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    BREW_PREFIX=$([[ $(uname -m) == arm64 ]] && echo /opt/homebrew || echo /usr/local)
-    eval "$($BREW_PREFIX/bin/brew shellenv)"
-fi
-
-if ! command -v gh &>/dev/null; then
-    echo "==> Installing GitHub CLI..."
-    brew install gh
-fi
-
+# ---------- Shared: gh auth + clone ---------------------------------------
 if ! gh auth status &>/dev/null; then
     echo "==> Signing in to GitHub (browser will open)..."
     gh auth login --hostname github.com --git-protocol https --web

@@ -70,7 +70,7 @@ fi
 
 if [[ ! -d "$DEST" ]]; then
     echo "==> Cloning $REPO into $DEST..."
-    gh repo clone "$REPO" "$DEST"
+    gh repo clone "$REPO" "$DEST" -- --recurse-submodules
 else
     # Re-running the curl one-liner on a machine where ~/.dotfiles already
     # exists should pick up upstream fixes, not silently run the stale local
@@ -85,6 +85,12 @@ else
         echo "==> $DEST exists on branch '$current_branch' — leaving untouched"
     fi
 fi
+
+# Idempotent: tpm (tmux plugin manager) is tracked as a submodule. Initialize
+# it here so setup.sh can stow tmux without referencing an empty directory.
+# Safe to re-run even when up-to-date.
+echo "==> Ensuring git submodules are initialized..."
+git -C "$DEST" submodule update --init --recursive
 
 echo "==> Handing off to $DEST/setup.sh..."
 cd "$DEST"

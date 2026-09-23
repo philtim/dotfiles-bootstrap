@@ -65,7 +65,10 @@ fi
 # ---------- Shared: gh auth + clone ---------------------------------------
 if ! gh auth status &>/dev/null; then
     echo "==> Signing in to GitHub (browser will open)..."
-    gh auth login --hostname github.com --git-protocol https --web
+    # Under `curl ... | bash`, stdin is the pipe, not the terminal — but
+    # gh's --web flow reads a "press Enter" confirmation from stdin.
+    # Reattach stdin to the controlling terminal so it doesn't hang/abort.
+    gh auth login --hostname github.com --git-protocol https --web </dev/tty
 fi
 
 if [[ ! -d "$DEST" ]]; then
